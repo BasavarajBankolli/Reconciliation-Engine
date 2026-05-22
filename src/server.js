@@ -1,8 +1,17 @@
 const app = require('./app');
+const mongoose = require('mongoose');
 
-// Use port 5000 directly
 const PORT = 5000;
+// 127.0.0.1 is standard localhost for your local machine
+const MONGO_URI = 'mongodb://127.0.0.1:27017/crypto-reconciler';
 
-app.listen(PORT, () => {
-    console.log(`Server is running at: http://localhost:${PORT}`);
-});
+mongoose.connect(MONGO_URI)
+    .then(() => {
+        console.log('Connected to MongoDB service!');
+        app.listen(PORT, () => {
+            console.log(`Server running at: http://localhost:${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('DB connection failed! Error:', err.message);
+    });
