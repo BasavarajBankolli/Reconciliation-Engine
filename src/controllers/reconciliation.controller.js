@@ -55,8 +55,7 @@ async function triggerReconciliation(req, res, next) {
 
     return res.status(202).json({
       runId,
-      message: 'Reconciliation started. Poll /report/:runId/summary for progress.',
-    });
+      message: `Reconciliation started. Poll /api/v1/report/${runId}/summary for progress.`    });
   } catch (err) {
     return next(err);
   }

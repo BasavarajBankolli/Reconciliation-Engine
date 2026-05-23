@@ -3,6 +3,7 @@
 const express = require('express');
 const reconciliationRoutes = require('./routes/reconciliation.routes');
 const { errorHandler } = require('./middleware/errorHandler');
+const reportRoutes = require('./routes/report.routes');
 const logger = require('./utils/logger');
 
 function createApp() {
@@ -10,6 +11,7 @@ function createApp() {
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use('/api/v1', reportRoutes);
 
   // ── Health check ─────────────────────────────────────────────────────
   app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date() }));

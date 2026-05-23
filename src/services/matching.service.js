@@ -86,23 +86,31 @@ function findBestMatch(userTx, exchangeCandidates, tolerances) {
   let bestDeltaQty = Infinity;
 
   for (const exTx of exchangeCandidates) {
-    // 1. Asset
+    // Asset must match
     if (!assetsMatch(userTx.asset, exTx.asset)) continue;
 
-    // 2. Type (exact or opposite perspective)
+    // Type must match
     if (!typesMatch(userTx.type, exTx.type)) continue;
 
-    // 3. Timestamp tolerance
     const dTs = timestampDeltaSeconds(userTx.timestamp, exTx.timestamp);
-    if (dTs > timestampToleranceSeconds) continue;
-
-    // 4. Quantity tolerance
     const dQty = quantityDeltaPct(userTx.quantity, exTx.quantity);
-    if (dQty > quantityTolerancePct) continue;
 
-    // Score: normalise each delta to [0,1] within tolerance, then sum
-    const normTs = timestampToleranceSeconds > 0 ? dTs / timestampToleranceSeconds : 0;
-    const normQty = quantityTolerancePct > 0 ? dQty / quantityTolerancePct : 0;
+    /**
+     * IMPORTANT:
+     * We now allow a wider search window so we can classify
+     * nearby transactions as CONFLICTING instead of dropping them.
+     */
+
+    const maxTsWindow = timestampToleranceSeconds * 3;
+    const maxQtyWindow = quantityTolerancePct * 3;
+
+    if (dTs > maxTsWindow) continue;
+    if (dQty > maxQtyWindow) continue;
+
+    // Lower score = better match
+    const normTs = dTs / maxTsWindow;
+    const normQty = dQty / maxQtyWindow;
+
     const score = normTs + normQty;
 
     if (score < bestScore) {
@@ -113,7 +121,11 @@ function findBestMatch(userTx, exchangeCandidates, tolerances) {
     }
   }
 
-  return { match: bestMatch, deltaTs: bestDeltaTs, deltaQty: bestDeltaQty };
+  return {
+    match: bestMatch,
+    deltaTs: bestDeltaTs,
+    deltaQty: bestDeltaQty,
+  };
 }
 
 /**
@@ -136,8 +148,10 @@ function findBestMatch(userTx, exchangeCandidates, tolerances) {
  */
 function classifyMatch(userTx, exTx, deltaTs, deltaQty, tolerances) {
   const { timestampToleranceSeconds, quantityTolerancePct } = tolerances;
+
   const conflicts = [];
 
+  // Timestamp conflict
   if (deltaTs > timestampToleranceSeconds) {
     conflicts.push({
       field: 'timestamp',
@@ -158,17 +172,33 @@ function classifyMatch(userTx, exTx, deltaTs, deltaQty, tolerances) {
     });
   }
 
+  // Optional transactionId mismatch detection
+  if (
+    userTx.transactionId &&
+    exTx.transactionId &&
+    userTx.transactionId !== exTx.transactionId
+  ) {
+    conflicts.push({
+      field: 'transactionId',
+      userValue: userTx.transactionId,
+      exchangeValue: exTx.transactionId,
+    });
+  }
+
+  // Final classification
   if (conflicts.length > 0) {
     return {
       category: RESULT_CATEGORIES.CONFLICTING,
-      reason: `Proximity match found but ${conflicts.map((c) => c.field).join(', ')} exceed tolerance`,
+      reason: `Potential match found but conflicts detected in: ${conflicts
+        .map((c) => c.field)
+        .join(', ')}`,
       conflicts,
     };
   }
 
   return {
     category: RESULT_CATEGORIES.MATCHED,
-    reason: `Matched on asset (${userTx.asset}), type, timestamp (Δ${deltaTs.toFixed(1)}s), quantity (Δ${deltaQty.toFixed(4)}%)`,
+    reason: `Matched within configured tolerances`,
     conflicts: [],
   };
 }
